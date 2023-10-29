@@ -7,6 +7,9 @@ Set chest limits with one clicks for common limit amounts. For common limits, th
 
 ## Features
 1. Tiny GUI to the side of the chest that has buttons for setting chest limits with one click.
+2. Click any button in the slots row to set the limit to that number of slots.
+3. Click any button in the rows row to set the limit to that number of rows.
+4. Click the clear limit button to remove the set chest limit.
 
 ## Credits
 1. [test447](https://mods.factorio.com/user/test447) - code
