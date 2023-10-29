@@ -110,7 +110,7 @@ end
 function QuickChestLimitGui.on_gui_click(event)
   local player = game.players[event.player_index]
   if not (event.element and event.element.tags and event.element.tags.action) then return end
-  if not (player.opened and player.opened.valid) then return end
+  if not (player.opened and player.opened.valid and player.opened_gui_type == defines.gui_type.entity) then return end
   local inventory = player.opened.get_inventory(defines.inventory.chest)
   if not (inventory and inventory.valid and inventory.supports_bar()) then return end
   local element = event.element
@@ -141,7 +141,7 @@ script.on_event(defines.events.on_gui_closed, QuickChestLimitGui.on_gui_closed)
 function QuickChestLimitGui.on_gui_opened(event)
   local player = game.players[event.player_index]
   if not (player and event.entity and event.entity.valid and fns.table_contains(QuickChestLimitGui.chest_types, event.entity.type)) then return end
-  if not (player.opened and player.opened.valid) then return end
+  if not (player.opened and player.opened.valid and player.opened_gui_type == defines.gui_type.entity) then return end
   local inventory = player.opened.get_inventory(defines.inventory.chest)
   if not (inventory and inventory.valid and inventory.supports_bar()) then return end
   QuickChestLimitGui.gui_open(player, inventory)
