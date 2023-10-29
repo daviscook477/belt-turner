@@ -1,0 +1,6 @@
+---------------------------------------------------------------------------------------------------
+Version: 0.0.1
+Date: ????
+  Changes:
+    - Initial release
+    - Adds a tiny GUI to the side of the chest for setting limits in one click

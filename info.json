@@ -1,0 +1,17 @@
+{
+  "name": "quick-chest-limit",
+  "version": "0.0.1",
+  "title": "Quick Chest Limit",
+  "author": "test447",
+  "contact": "https://github.com/daviscook477/quick-chest-limit/issues",
+  "factorio_version": "1.1",
+  "dependencies": [
+    "base"
+  ],
+  "description": "Set chest limits quickly using buttons for 1 stack, 1 row, and other common limit amounts.",
+  "package": {
+    "git_publish_branch": "main",
+    "ignore": [".git", ".github", ".vscode", ".kakrc"],
+    "sync_portal_details":  true
+  }
+}
