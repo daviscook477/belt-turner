@@ -1,14 +1,14 @@
 {
-  "name": "quick-chest-limit",
-  "version": "0.0.2",
-  "title": "Quick Chest Limit",
+  "name": "belt-turner",
+  "version": "0.0.1",
+  "title": "Belt Turner",
   "author": "test447",
-  "contact": "https://github.com/daviscook477/quick-chest-limit/issues",
+  "contact": "https://github.com/daviscook477/belt-turner/issues",
   "factorio_version": "1.1",
   "dependencies": [
     "base"
   ],
-  "description": "Set chest limits quickly using buttons for 1 stack, 1 row, and other common limit amounts.",
+  "description": "Turns belts automatically when pasting multi-belt lane blueprints.",
   "package": {
     "git_publish_branch": "main",
     "ignore": [".git", ".github", ".vscode", ".kakrc"],
