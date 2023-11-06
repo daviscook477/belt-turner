@@ -1,5 +1,6 @@
 # Belt Turner
 Turns belts automatically when pasting multiple belt lane blueprints.
+![](mod-portal/belt-turner-example.gif)
 
 ## Motivation
 1. When routing multiple lanes of belts I always just blueprint a straight section of belt and drag that, but that doesn't play nicely with corners so I have to manually fix a corner and then copy/paste (and potentially flip!) that corner to all the other turns I did on the belt.
