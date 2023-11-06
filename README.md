@@ -10,5 +10,8 @@ Turns belts automatically when pasting multiple belt lane blueprints.
   a. For example, if you are making 3 lanes of belts, you'll need to copy at least a 4 X 3 section of straight belts to use the belt turner functionality when pasting the blueprint.
   b. The pasted blueprint has to match up exactly on the corner in order to perform the turn.
 
+## Limitations
+1. I can't actually change the belt paste preview to show the turned belts like in the thumbnail, but it does actually turn the belts after you paste :)
+
 ## Credits
 1. [test447](https://mods.factorio.com/user/test447) - code
