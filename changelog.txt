@@ -1,4 +1,11 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.0.2
+Date: 2023-11-08
+  Changes:
+    - Turn belts in a couple more cases when incidentally pasting a blueprint over belts that would not be turned
+    - Small lua optimizations
+    - Skip processing when blueprints that aren't N X M blocks of belts are pasted
+---------------------------------------------------------------------------------------------------
 Version: 0.0.1
 Date: 2023-11-6
   Changes:
