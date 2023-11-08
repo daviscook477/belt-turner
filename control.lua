@@ -155,6 +155,15 @@ to the robots (each belt that gets turned now needs both a destruct and construc
 can and should be skipped if the belts all have the same item
 --]]
 
+function are_belts_single_item(surface, area)
+  local item_name = nil
+  for i=area.left_top.x,area.right_bottom.x do
+    for j=area.left_top.y,area.right_bottom.y do
+      local belts = surface.find_entities_filtered{type="transport-belt", position={x=i+0.5,y=j+0.5}}
+    end
+  end
+end
+
 function turn_belts(surface, area, direction1, direction2, flag)
   local icount = 1
   for i=area.left_top.x,area.right_bottom.x do
