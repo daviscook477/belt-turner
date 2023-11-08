@@ -187,14 +187,18 @@ function compute_direction_array(surface, area)
   -- store the directions of belt ghosts
   local ghost_belts = surface.find_entities_filtered{area=area, ghost_type="transport-belt"}
   for _, ghost_belt in pairs(ghost_belts) do
-    array[math.floor(ghost_belt.position.x)] = array[math.floor(ghost_belt.position.x)] or {}
-    array[math.floor(ghost_belt.position.x)][math.floor(ghost_belt.position.y)] = ghost_belt.direction or 0 -- the API is weird and returns nil instead of 0
+    local floor_x = math.floor(ghost_belt.position.x)
+    local floor_y = math.floor(ghost_belt.position.y)
+    array[floor_x] = array[floor_x] or {}
+    array[floor_x][floor_y] = ghost_belt.direction or 0 -- the API is weird and returns nil instead of 0
   end
   -- store the directions of belts
   local belts = surface.find_entities_filtered{area=area, type="transport-belt"}
   for _, belt in pairs(belts) do
-    array[math.floor(belt.position.x)] = array[math.floor(belt.position.x)] or {}
-    array[math.floor(belt.position.x)][math.floor(belt.position.y)] = belt.direction or 0 -- the API is weird and returns nil instead of 0
+    local floor_x = math.floor(belt.position.x)
+    local floor_y = math.floor(belt.position.y)
+    array[floor_x] = array[floor_x] or {}
+    array[floor_x][floor_y] = belt.direction or 0 -- the API is weird and returns nil instead of 0
   end
   -- any position not filled by a belt direction gets a direction of -1 (not 0 because belt directions are 0, 2, 4, 6)
   for i=area.left_top.x,area.right_bottom.x do
@@ -214,14 +218,14 @@ function compute_direction_array(surface, area)
 end
 
 ---compute the AABB of a given (valid) blueprint
----@param blueprint any
+---@param blueprint_entities any
 ---@return number xmin min x value
 ---@return number xmax max x value
 ---@return number ymin min y value
 ---@return number ymax max y value
-function compute_blueprint_aabb(blueprint)
+function compute_blueprint_aabb(blueprint_entities)
   local xmin, xmax, ymin, ymax
-  for _, blueprint_entity in pairs(blueprint.get_blueprint_entities()) do
+  for _, blueprint_entity in pairs(blueprint_entities) do
     if not (xmin and xmax and ymin and ymax) then 
       xmin = blueprint_entity.position.x
       xmax = blueprint_entity.position.x
@@ -238,11 +242,11 @@ function compute_blueprint_aabb(blueprint)
 end
 
 ---compute the direction of the blueprint
----@param blueprint any
+---@param blueprint_entities any
 ---@return number|nil direction the direction of the blueprint or nil if the entities in the blueprint do not all match direction
-function compute_blueprint_direction(blueprint)
+function compute_blueprint_direction(blueprint_entities)
   local blueprint_direction = nil
-  for _, blueprint_entity in pairs(blueprint.get_blueprint_entities()) do
+  for _, blueprint_entity in pairs(blueprint_entities) do
     local real_direction = blueprint_entity.direction or 0 -- the API is weird and returns nil instead of 0
     if not blueprint_direction then
       blueprint_direction = real_direction
@@ -283,7 +287,8 @@ function on_pre_build(event)
 
   -- compute blueprint aabb so we know the bounds to search for belts to turn
   local blueprint = player.cursor_stack
-  local xmin, xmax, ymin, ymax = compute_blueprint_aabb(blueprint)
+  local blueprint_entities = blueprint.get_blueprint_entities()
+  local xmin, xmax, ymin, ymax = compute_blueprint_aabb(blueprint_entities)
 
   -- compute aabb center since we need to treat the blueprint entities as relative to this point
   local blueprint_center = {
@@ -295,7 +300,7 @@ function on_pre_build(event)
   local delta = pos_sub(cursor_position, blueprint_center)
 
   -- compute the direction the blueprint belts point and determine the width of the belt lines we are turning
-  local blueprint_direction = compute_blueprint_direction(blueprint)
+  local blueprint_direction = compute_blueprint_direction(blueprint_entities)
   local brush_width = math.min(ymax - ymin, xmax - xmin) + 1 -- the width is the min side length of the rectangle since we require a rectangle to be able to detect the turning event
   if not blueprint_direction then return end
 
@@ -342,7 +347,7 @@ function on_pre_build(event)
   -- after this pre_build event completes so we have to combine the result of compute_direction_array with the directions of the transformed
   -- belt entities in the blueprint
   local array_extension = compute_direction_array(surface, area_extension)
-  for _, blueprint_entity in pairs(blueprint.get_blueprint_entities()) do
+  for _, blueprint_entity in pairs(blueprint_entities) do
     local xformed_pos = transform_blueprint_position(delta, event.direction, blueprint_entity.position, blueprint_center)
     local xformed_x = math.floor(xformed_pos.x)
     local xformed_y = math.floor(xformed_pos.y)
