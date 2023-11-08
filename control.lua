@@ -155,16 +155,31 @@ to the robots (each belt that gets turned now needs both a destruct and construc
 can and should be skipped if the belts all have the same item
 --]]
 
+---determines if all the belts in a given area that we want to turn contain the same item
+---@param surface any
+---@param area any
+---@return boolean single_item whether all the belts contain the same item
 function are_belts_single_item(surface, area)
-  local item_name = nil
-  for i=area.left_top.x,area.right_bottom.x do
-    for j=area.left_top.y,area.right_bottom.y do
-      local belts = surface.find_entities_filtered{type="transport-belt", position={x=i+0.5,y=j+0.5}}
+  local found_item_name = nil
+  -- skip ghost belts since ghost belts cannot have items on them
+  local belts = surface.find_entities_filtered{area=area, type="transport-belt"}
+  for _, belt in pairs(belts) do
+    for i=1,belt.get_max_transport_line_index() do
+      local transport_line = belt.get_transport_line(i)
+      for item_name, count in pairs(transport_line.get_contents()) do
+        if not found_item_name then
+          found_item_name = item_name
+        end
+        if item_name ~= found_item_name then return false end
+      end
     end
   end
+  return true
 end
 
-function turn_belts(surface, area, direction1, direction2, flag)
+function turn_belts(player, surface, area, direction1, direction2, flag)
+  local single_item = are_belts_single_item(surface, area)
+
   local icount = 1
   for i=area.left_top.x,area.right_bottom.x do
     local jcount = 1
@@ -172,9 +187,17 @@ function turn_belts(surface, area, direction1, direction2, flag)
       local belts = surface.find_entities_filtered{type="transport-belt", position={x=i+0.5,y=j+0.5}}
       if belts[1] then
         if jcount <= icount + (flag and 0 or -1) then
-          belts[1].direction = direction1
+          if not single_item and belts[1].direction ~= direction1 then
+            belts[1].order_deconstruction(player.force, player)
+          else
+            belts[1].direction = direction1
+          end
         else
-          belts[1].direction = direction2
+          if not single_item and belts[1].direction ~= direction2 then
+            belts[1].order_deconstruction(player.force, player)
+          else
+            belts[1].direction = direction2
+          end
         end
       else
         local belt_ghosts = surface.find_entities_filtered{position={x=i+0.5,y=j+0.5}, ghost_type="transport-belt"}
@@ -192,7 +215,9 @@ function turn_belts(surface, area, direction1, direction2, flag)
   end
 end
 
-function turn_belts2(surface, area, direction1, direction2, flag)
+function turn_belts2(player, surface, area, direction1, direction2, flag)
+  local single_item = are_belts_single_item(surface, area)
+
   local icount = 1
   for i=area.left_top.x,area.right_bottom.x do
     local jcount = 1
@@ -200,9 +225,17 @@ function turn_belts2(surface, area, direction1, direction2, flag)
       local belts = surface.find_entities_filtered{type="transport-belt", position={x=i+0.5,y=j+0.5}}
       if belts[1] then
         if jcount + icount <= area.right_bottom.x - area.left_top.x + (flag and 1 or 2) then
-          belts[1].direction = direction1
+          if not single_item and belts[1].direction ~= direction1 then
+            belts[1].order_deconstruction(player.force, player)
+          else
+            belts[1].direction = direction1
+          end
         else
-          belts[1].direction = direction2
+          if not single_item and belts[1].direction ~= direction2 then
+            belts[1].order_deconstruction(player.force, player)
+          else
+            belts[1].direction = direction2
+          end
         end
       else
         local belt_ghosts = surface.find_entities_filtered{position={x=i+0.5,y=j+0.5}, ghost_type="transport-belt"}
@@ -437,21 +470,21 @@ function on_pre_build(event)
   -- note that the cases here don't cover every possible combination of the 4 directions for the 4 edges of the square
   -- but this is because there are only 8 possible belt turns so we look for them specifically
   if x_right_dir == 2 and y_bottom_dir == 0 then
-    turn_belts(surface, area_turn, 0, 2, true)
+    turn_belts(player, surface, area_turn, 0, 2, true)
   elseif x_left_dir == 2 and y_top_dir == 0 then
-    turn_belts(surface, area_turn, 2, 0, true)
+    turn_belts(player, surface, area_turn, 2, 0, true)
   elseif (x_right_dir == 2 and y_top_dir == 4) then
-    turn_belts2(surface, area_turn, 2, 4, true)
+    turn_belts2(player, surface, area_turn, 2, 4, true)
   elseif (x_left_dir == 2 and y_bottom_dir == 4) then
-    turn_belts2(surface, area_turn, 4, 2, true)
+    turn_belts2(player, surface, area_turn, 4, 2, true)
   elseif (x_right_dir == 6 and y_top_dir == 0) then
-    turn_belts2(surface, area_turn, 6, 0, false)
+    turn_belts2(player, surface, area_turn, 6, 0, false)
   elseif (x_left_dir == 6 and y_bottom_dir == 0) then
-    turn_belts2(surface, area_turn, 0, 6, false)
+    turn_belts2(player, surface, area_turn, 0, 6, false)
   elseif (x_right_dir == 6 and y_bottom_dir == 4) then
-    turn_belts(surface, area_turn, 4, 6, false)
+    turn_belts(player, surface, area_turn, 4, 6, false)
   elseif (x_left_dir == 6 and y_top_dir == 4) then
-    turn_belts(surface, area_turn, 6, 4, false)
+    turn_belts(player, surface, area_turn, 6, 4, false)
   end
 end
 script.on_event(defines.events.on_pre_build, on_pre_build)
