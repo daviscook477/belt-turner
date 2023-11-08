@@ -346,6 +346,7 @@ function on_pre_build(event)
   -- if they are not and avoid wasting compute resources when unnecessary
   local blueprint = player.cursor_stack
   local blueprint_entities = blueprint.get_blueprint_entities()
+  if not blueprint_entities then return end -- blueprint is entirely tiles
   local xmin, xmax, ymin, ymax = compute_blueprint_aabb(blueprint_entities)
   if not (xmin and xmax and ymin and ymax) then return end
 
