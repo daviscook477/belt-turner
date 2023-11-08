@@ -150,36 +150,14 @@ This can be avoided by destructing the belts that get turned and replacing them.
 Now the belts aren't mixed, and a belt ghost of the same belt level (yellow, red, blue, or modded) can be placed in the same position as the destruction order
 since a ghost can overlap the belt destruction order
 
-This destruction followed by ghost placing procedure is only necessary when the belts don't all have the same item, and it is slower since it gives more orders
-to the robots (each belt that gets turned now needs both a destruct and construct order rather than the 0 orders used to turn it by default) so this procedure
-can and should be skipped if the belts all have the same item
+This destruction followed by ghost placing procedure is only necessary when the belts don't all have the same item, but it is used in all cases since ordering
+the destruction as if it was done by the player results in it being a part of the player's undo queue so they can actually undo the belt turning
+
+Additionally because this is being handled in pre_build, it's not necessary for the script to place the ghosts, since the ghosts placed in the actual build events
+that will happen after pre_build end up in the spot where the turned belts need to be
 --]]
 
----determines if all the belts in a given area that we want to turn contain the same item
----@param surface any
----@param area any
----@return boolean single_item whether all the belts contain the same item
-function are_belts_single_item(surface, area)
-  local found_item_name = nil
-  -- skip ghost belts since ghost belts cannot have items on them
-  local belts = surface.find_entities_filtered{area=area, type="transport-belt"}
-  for _, belt in pairs(belts) do
-    for i=1,belt.get_max_transport_line_index() do
-      local transport_line = belt.get_transport_line(i)
-      for item_name, count in pairs(transport_line.get_contents()) do
-        if not found_item_name then
-          found_item_name = item_name
-        end
-        if item_name ~= found_item_name then return false end
-      end
-    end
-  end
-  return true
-end
-
 function turn_belts(player, surface, area, direction1, direction2, flag)
-  local single_item = are_belts_single_item(surface, area)
-
   local icount = 1
   for i=area.left_top.x,area.right_bottom.x do
     local jcount = 1
@@ -187,25 +165,25 @@ function turn_belts(player, surface, area, direction1, direction2, flag)
       local belts = surface.find_entities_filtered{type="transport-belt", position={x=i+0.5,y=j+0.5}}
       if belts[1] then
         if jcount <= icount + (flag and 0 or -1) then
-          if not single_item and belts[1].direction ~= direction1 then
+          if belts[1].direction ~= direction1 then
             belts[1].order_deconstruction(player.force, player)
-          else
-            belts[1].direction = direction1
           end
         else
-          if not single_item and belts[1].direction ~= direction2 then
+          if belts[1].direction ~= direction2 then
             belts[1].order_deconstruction(player.force, player)
-          else
-            belts[1].direction = direction2
           end
         end
       else
         local belt_ghosts = surface.find_entities_filtered{position={x=i+0.5,y=j+0.5}, ghost_type="transport-belt"}
         if belt_ghosts[1] then
           if jcount <= icount + (flag and 0 or -1) then
-            belt_ghosts[1].direction = direction1
+            if belt_ghosts[1].direction ~= direction1 then
+              belt_ghosts[1].order_deconstruction(player.force, player)
+            end
           else
-            belt_ghosts[1].direction = direction2
+            if belt_ghosts[1].direction ~= direction2 then
+              belt_ghosts[1].order_deconstruction(player.force, player)
+            end
           end
         end
       end
@@ -216,8 +194,6 @@ function turn_belts(player, surface, area, direction1, direction2, flag)
 end
 
 function turn_belts2(player, surface, area, direction1, direction2, flag)
-  local single_item = are_belts_single_item(surface, area)
-
   local icount = 1
   for i=area.left_top.x,area.right_bottom.x do
     local jcount = 1
@@ -225,25 +201,25 @@ function turn_belts2(player, surface, area, direction1, direction2, flag)
       local belts = surface.find_entities_filtered{type="transport-belt", position={x=i+0.5,y=j+0.5}}
       if belts[1] then
         if jcount + icount <= area.right_bottom.x - area.left_top.x + (flag and 1 or 2) then
-          if not single_item and belts[1].direction ~= direction1 then
+          if belts[1].direction ~= direction1 then
             belts[1].order_deconstruction(player.force, player)
-          else
-            belts[1].direction = direction1
           end
         else
-          if not single_item and belts[1].direction ~= direction2 then
+          if belts[1].direction ~= direction2 then
             belts[1].order_deconstruction(player.force, player)
-          else
-            belts[1].direction = direction2
           end
         end
       else
         local belt_ghosts = surface.find_entities_filtered{position={x=i+0.5,y=j+0.5}, ghost_type="transport-belt"}
         if belt_ghosts[1] then
           if jcount + icount <= area.right_bottom.x - area.left_top.x + (flag and 1 or 2) then
-            belt_ghosts[1].direction = direction1
+            if belt_ghosts[1].direction ~= direction1 then
+              belt_ghosts[1].order_deconstruction(player.force, player)
+            end
           else
-            belt_ghosts[1].direction = direction2
+            if belt_ghosts[1].direction ~= direction2 then
+              belt_ghosts[1].order_deconstruction(player.force, player)
+            end
           end
         end
       end
