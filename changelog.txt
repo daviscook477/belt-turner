@@ -1,4 +1,9 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.0.3
+Date: 2023-11-08
+  Changes:
+    - Handle turning belts that don't all contain the same item by marking the belts that need to be turned for deconstruction before the turned ghost is placed
+---------------------------------------------------------------------------------------------------
 Version: 0.0.2
 Date: 2023-11-08
   Changes:
