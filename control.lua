@@ -122,7 +122,42 @@ I don't know which of the numbers 1-4 for the function calls actually matches wh
 but it's not necessary since I set up the function calls through trial-and-error
 --]]
 
-function turn_belts(surface, area, direction1, direction2, flag)
+--[[
+Turning belts when they don't all have the same items on them does not work naively
+
+Ex. S = steel I = iron C = copper
+
+Starting with the following 3 lines of belts, turning them to the left will mix the belts
+1. S   I   C
+   |   |   |
+   S   I   C
+   |   |   |
+   S   I   C
+Mixed belts because even though they weren't mixed before being turned, they are mixed now
+2. S - I - C
+           |
+   S - I   C
+       |   |
+   S   I   C
+
+This can be avoided by destructing the belts that get turned and replacing them. Continuing the previous example but X represents a destruction order
+3. X - X - C
+           |
+   X - I   C
+       |   |
+   S   I   C
+
+Now the belts aren't mixed, and a belt ghost of the same belt level (yellow, red, blue, or modded) can be placed in the same position as the destruction order
+since a ghost can overlap the belt destruction order
+
+This destruction followed by ghost placing procedure is only necessary when the belts don't all have the same item, but it is used in all cases since ordering
+the destruction as if it was done by the player results in it being a part of the player's undo queue so they can actually undo the belt turning
+
+Additionally because this is being handled in pre_build, it's not necessary for the script to place the ghosts, since the ghosts placed in the actual build events
+that will happen after pre_build end up in the spot where the turned belts need to be
+--]]
+
+function turn_belts(player, surface, area, direction1, direction2, flag)
   local icount = 1
   for i=area.left_top.x,area.right_bottom.x do
     local jcount = 1
@@ -130,17 +165,25 @@ function turn_belts(surface, area, direction1, direction2, flag)
       local belts = surface.find_entities_filtered{type="transport-belt", position={x=i+0.5,y=j+0.5}}
       if belts[1] then
         if jcount <= icount + (flag and 0 or -1) then
-          belts[1].direction = direction1
+          if belts[1].direction ~= direction1 then
+            belts[1].order_deconstruction(player.force, player)
+          end
         else
-          belts[1].direction = direction2
+          if belts[1].direction ~= direction2 then
+            belts[1].order_deconstruction(player.force, player)
+          end
         end
       else
         local belt_ghosts = surface.find_entities_filtered{position={x=i+0.5,y=j+0.5}, ghost_type="transport-belt"}
         if belt_ghosts[1] then
           if jcount <= icount + (flag and 0 or -1) then
-            belt_ghosts[1].direction = direction1
+            if belt_ghosts[1].direction ~= direction1 then
+              belt_ghosts[1].order_deconstruction(player.force, player)
+            end
           else
-            belt_ghosts[1].direction = direction2
+            if belt_ghosts[1].direction ~= direction2 then
+              belt_ghosts[1].order_deconstruction(player.force, player)
+            end
           end
         end
       end
@@ -150,7 +193,7 @@ function turn_belts(surface, area, direction1, direction2, flag)
   end
 end
 
-function turn_belts2(surface, area, direction1, direction2, flag)
+function turn_belts2(player, surface, area, direction1, direction2, flag)
   local icount = 1
   for i=area.left_top.x,area.right_bottom.x do
     local jcount = 1
@@ -158,17 +201,25 @@ function turn_belts2(surface, area, direction1, direction2, flag)
       local belts = surface.find_entities_filtered{type="transport-belt", position={x=i+0.5,y=j+0.5}}
       if belts[1] then
         if jcount + icount <= area.right_bottom.x - area.left_top.x + (flag and 1 or 2) then
-          belts[1].direction = direction1
+          if belts[1].direction ~= direction1 then
+            belts[1].order_deconstruction(player.force, player)
+          end
         else
-          belts[1].direction = direction2
+          if belts[1].direction ~= direction2 then
+            belts[1].order_deconstruction(player.force, player)
+          end
         end
       else
         local belt_ghosts = surface.find_entities_filtered{position={x=i+0.5,y=j+0.5}, ghost_type="transport-belt"}
         if belt_ghosts[1] then
           if jcount + icount <= area.right_bottom.x - area.left_top.x + (flag and 1 or 2) then
-            belt_ghosts[1].direction = direction1
+            if belt_ghosts[1].direction ~= direction1 then
+              belt_ghosts[1].order_deconstruction(player.force, player)
+            end
           else
-            belt_ghosts[1].direction = direction2
+            if belt_ghosts[1].direction ~= direction2 then
+              belt_ghosts[1].order_deconstruction(player.force, player)
+            end
           end
         end
       end
@@ -389,27 +440,27 @@ function on_pre_build(event)
   -- the area to turn is just the candidate_square but we represent it as a bounding box here instead of a position + size
   local area_turn={left_top={x=candidate_square.x-brush_width+1,y=candidate_square.y-brush_width+1}, right_bottom={x=candidate_square.x,y=candidate_square.y}}
 
-  -- this is the trial-and-error part where we chose which variant of turning the belts is required to connect the given directions
+  -- this is the part I setup by trial-and-error where we chose which variant of turning the belts is required to connect the given directions
   -- we don't have to care about which direction was from the existing belts or from the blueprint here since the orientation of the
   -- belts in the square is only based on the incoming and outgoing direction
   -- note that the cases here don't cover every possible combination of the 4 directions for the 4 edges of the square
   -- but this is because there are only 8 possible belt turns so we look for them specifically
   if x_right_dir == 2 and y_bottom_dir == 0 then
-    turn_belts(surface, area_turn, 0, 2, true)
+    turn_belts(player, surface, area_turn, 0, 2, true)
   elseif x_left_dir == 2 and y_top_dir == 0 then
-    turn_belts(surface, area_turn, 2, 0, true)
+    turn_belts(player, surface, area_turn, 2, 0, true)
   elseif (x_right_dir == 2 and y_top_dir == 4) then
-    turn_belts2(surface, area_turn, 2, 4, true)
+    turn_belts2(player, surface, area_turn, 2, 4, true)
   elseif (x_left_dir == 2 and y_bottom_dir == 4) then
-    turn_belts2(surface, area_turn, 4, 2, true)
+    turn_belts2(player, surface, area_turn, 4, 2, true)
   elseif (x_right_dir == 6 and y_top_dir == 0) then
-    turn_belts2(surface, area_turn, 6, 0, false)
+    turn_belts2(player, surface, area_turn, 6, 0, false)
   elseif (x_left_dir == 6 and y_bottom_dir == 0) then
-    turn_belts2(surface, area_turn, 0, 6, false)
+    turn_belts2(player, surface, area_turn, 0, 6, false)
   elseif (x_right_dir == 6 and y_bottom_dir == 4) then
-    turn_belts(surface, area_turn, 4, 6, false)
+    turn_belts(player, surface, area_turn, 4, 6, false)
   elseif (x_left_dir == 6 and y_top_dir == 4) then
-    turn_belts(surface, area_turn, 6, 4, false)
+    turn_belts(player, surface, area_turn, 6, 4, false)
   end
 end
 script.on_event(defines.events.on_pre_build, on_pre_build)
