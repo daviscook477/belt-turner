@@ -122,6 +122,39 @@ I don't know which of the numbers 1-4 for the function calls actually matches wh
 but it's not necessary since I set up the function calls through trial-and-error
 --]]
 
+--[[
+Turning belts when they don't all have the same items on them does not work naively
+
+Ex. S = steel I = iron C = copper
+
+Starting with the following 3 lines of belts, turning them to the left will mix the belts
+1. S   I   C
+   |   |   |
+   S   I   C
+   |   |   |
+   S   I   C
+Mixed belts because even though they weren't mixed before being turned, they are mixed now
+2. S - I - C
+           |
+   S - I   C
+       |   |
+   S   I   C
+
+This can be avoided by destructing the belts that get turned and replacing them. Continuing the previous example but X represents a destruction order
+3. X - X - C
+           |
+   X - I   C
+       |   |
+   S   I   C
+
+Now the belts aren't mixed, and a belt ghost of the same belt level (yellow, red, blue, or modded) can be placed in the same position as the destruction order
+since a ghost can overlap the belt destruction order
+
+This destruction followed by ghost placing procedure is only necessary when the belts don't all have the same item, and it is slower since it gives more orders
+to the robots (each belt that gets turned now needs both a destruct and construct order rather than the 0 orders used to turn it by default) so this procedure
+can and should be skipped if the belts all have the same item
+--]]
+
 function turn_belts(surface, area, direction1, direction2, flag)
   local icount = 1
   for i=area.left_top.x,area.right_bottom.x do
@@ -369,7 +402,7 @@ function on_pre_build(event)
   -- the area to turn is just the candidate_square but we represent it as a bounding box here instead of a position + size
   local area_turn={left_top={x=candidate_square.x-brush_width+1,y=candidate_square.y-brush_width+1}, right_bottom={x=candidate_square.x,y=candidate_square.y}}
 
-  -- this is the trial-and-error part where we chose which variant of turning the belts is required to connect the given directions
+  -- this is the part I setup by trial-and-error where we chose which variant of turning the belts is required to connect the given directions
   -- we don't have to care about which direction was from the existing belts or from the blueprint here since the orientation of the
   -- belts in the square is only based on the incoming and outgoing direction
   -- note that the cases here don't cover every possible combination of the 4 directions for the 4 edges of the square
