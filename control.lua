@@ -229,14 +229,18 @@ function compute_direction_array(surface, area)
   -- store the directions of belt ghosts
   local ghost_belts = surface.find_entities_filtered{area=area, ghost_type="transport-belt"}
   for _, ghost_belt in pairs(ghost_belts) do
-    array[math.floor(ghost_belt.position.x)] = array[math.floor(ghost_belt.position.x)] or {}
-    array[math.floor(ghost_belt.position.x)][math.floor(ghost_belt.position.y)] = ghost_belt.direction or 0 -- the API is weird and returns nil instead of 0
+    local floor_x = math.floor(ghost_belt.position.x)
+    local floor_y = math.floor(ghost_belt.position.y)
+    array[floor_x] = array[floor_x] or {}
+    array[floor_x][floor_y] = ghost_belt.direction or 0 -- the API is weird and returns nil instead of 0
   end
   -- store the directions of belts
   local belts = surface.find_entities_filtered{area=area, type="transport-belt"}
   for _, belt in pairs(belts) do
-    array[math.floor(belt.position.x)] = array[math.floor(belt.position.x)] or {}
-    array[math.floor(belt.position.x)][math.floor(belt.position.y)] = belt.direction or 0 -- the API is weird and returns nil instead of 0
+    local floor_x = math.floor(belt.position.x)
+    local floor_y = math.floor(belt.position.y)
+    array[floor_x] = array[floor_x] or {}
+    array[floor_x][floor_y] = belt.direction or 0 -- the API is weird and returns nil instead of 0
   end
   -- any position not filled by a belt direction gets a direction of -1 (not 0 because belt directions are 0, 2, 4, 6)
   for i=area.left_top.x,area.right_bottom.x do
@@ -256,14 +260,19 @@ function compute_direction_array(surface, area)
 end
 
 ---compute the AABB of a given (valid) blueprint
----@param blueprint any
----@return number xmin min x value
----@return number xmax max x value
----@return number ymin min y value
----@return number ymax max y value
-function compute_blueprint_aabb(blueprint)
+---and verify that the entities within it are all transport belts
+---@param blueprint_entities any
+---@return number|nil xmin min x value
+---@return number|nil xmax max x value
+---@return number|nil ymin min y value
+---@return number|nil ymax max y value
+function compute_blueprint_aabb(blueprint_entities)
+  local entity_prototypes = game.entity_prototypes
   local xmin, xmax, ymin, ymax
-  for _, blueprint_entity in pairs(blueprint.get_blueprint_entities()) do
+  for _, blueprint_entity in pairs(blueprint_entities) do
+    local entity_prototype = entity_prototypes[blueprint_entity.name]
+    if not entity_prototype or entity_prototype.type ~= "transport-belt" then return nil, nil, nil, nil end
+
     if not (xmin and xmax and ymin and ymax) then 
       xmin = blueprint_entity.position.x
       xmax = blueprint_entity.position.x
@@ -280,11 +289,11 @@ function compute_blueprint_aabb(blueprint)
 end
 
 ---compute the direction of the blueprint
----@param blueprint any
+---@param blueprint_entities any
 ---@return number|nil direction the direction of the blueprint or nil if the entities in the blueprint do not all match direction
-function compute_blueprint_direction(blueprint)
+function compute_blueprint_direction(blueprint_entities)
   local blueprint_direction = nil
-  for _, blueprint_entity in pairs(blueprint.get_blueprint_entities()) do
+  for _, blueprint_entity in pairs(blueprint_entities) do
     local real_direction = blueprint_entity.direction or 0 -- the API is weird and returns nil instead of 0
     if not blueprint_direction then
       blueprint_direction = real_direction
@@ -324,8 +333,12 @@ function on_pre_build(event)
   if not cursor_position then return end
 
   -- compute blueprint aabb so we know the bounds to search for belts to turn
+  -- also checks that all the entities in the blueprint are belts so we can fail-fast
+  -- if they are not and avoid wasting compute resources when unnecessary
   local blueprint = player.cursor_stack
-  local xmin, xmax, ymin, ymax = compute_blueprint_aabb(blueprint)
+  local blueprint_entities = blueprint.get_blueprint_entities()
+  local xmin, xmax, ymin, ymax = compute_blueprint_aabb(blueprint_entities)
+  if not (xmin and xmax and ymin and ymax) then return end
 
   -- compute aabb center since we need to treat the blueprint entities as relative to this point
   local blueprint_center = {
@@ -337,9 +350,15 @@ function on_pre_build(event)
   local delta = pos_sub(cursor_position, blueprint_center)
 
   -- compute the direction the blueprint belts point and determine the width of the belt lines we are turning
-  local blueprint_direction = compute_blueprint_direction(blueprint)
+  local blueprint_direction = compute_blueprint_direction(blueprint_entities)
   local brush_width = math.min(ymax - ymin, xmax - xmin) + 1 -- the width is the min side length of the rectangle since we require a rectangle to be able to detect the turning event
   if not blueprint_direction then return end
+
+  -- the direction of the belts in the blueprint is not the direction of the pasted belts
+  -- so we compute the pasted blueprint direction by modifying the direction by the direction of the paste from the event
+  -- mod 8 because factorio directions are in mod 8 
+  -- TODO will this change in 2.0 with 16 direction rails
+  local pasted_blueprint_direction = (blueprint_direction + event.direction) % 8
 
   -- compute the AABB of the pasted location using the transformation logic on the blueprint AABB
   local t_xmin, t_xmax, t_ymin, t_ymax = transform_aabb(delta, event.direction, xmin, xmax, ymin, ymax, blueprint_center)
@@ -350,17 +369,18 @@ function on_pre_build(event)
   -- if this square is present, it is the square of belts in the corner of the existing belt line and the turned belt line
   -- being created by the pre_build blueprint stamp down event
   local array = compute_direction_array(surface, area)
-  local candidate_square = find_square(array, area)
+  -- but while searching for the square, we want to skip over any belts matching the direction of the pasted blueprint
+  -- (or the opposite direction of the pasted blueprint) since we wouldn't be interested in turning them and if 
+  -- we consider them we waste computing time later trying to figure out if we should turn a square containing them
+  -- when we can already ignore that square at this step
+  local skip_directions = {}
+  skip_directions[pasted_blueprint_direction] = true
+  skip_directions[(pasted_blueprint_direction + 4) % 8] = true
+  local candidate_square = find_square(array, area, skip_directions)
   if not candidate_square or candidate_square.size ~= brush_width then return end
 
   -- compute the direction of the square of belts that we might be turning
   local square_direction = compute_square_direction(array, candidate_square)
-
-  -- the direction of the belts in the blueprint is not the direction of the pasted belts
-  -- so we compute the pasted blueprint direction by modifying the direction by the direction of the paste from the event
-  -- mod 8 because factorio directions are in mod 8 
-  -- TODO will this change in 2.0 with 16 direction rails
-  local pasted_blueprint_direction = (blueprint_direction + event.direction) % 8
 
   -- if the paste direction is either the same or opposite the sqaure direction we can't make a 90 degree turn
   if pasted_blueprint_direction == square_direction or (pasted_blueprint_direction + 4) % 8 == square_direction then
@@ -377,7 +397,7 @@ function on_pre_build(event)
   -- after this pre_build event completes so we have to combine the result of compute_direction_array with the directions of the transformed
   -- belt entities in the blueprint
   local array_extension = compute_direction_array(surface, area_extension)
-  for _, blueprint_entity in pairs(blueprint.get_blueprint_entities()) do
+  for _, blueprint_entity in pairs(blueprint_entities) do
     local xformed_pos = transform_blueprint_position(delta, event.direction, blueprint_entity.position, blueprint_center)
     local xformed_x = math.floor(xformed_pos.x)
     local xformed_y = math.floor(xformed_pos.y)
@@ -437,10 +457,12 @@ end
 script.on_event(defines.events.on_pre_build, on_pre_build)
 
 ---finds the largest possible square inside some rectangle area
+---ignoring all positions in the array that match the skipped directions
 ---@param array any
 ---@param area any
+---@param skip_directions any
 ---@return table|nil
-function find_square(array, area)
+function find_square(array, area, skip_directions)
   local square_size = {}
   -- additional 1 row/col to the top_left to not have to do out-of-bounds checks
   for i=area.left_top.x-1,area.right_bottom.x do
@@ -456,7 +478,7 @@ function find_square(array, area)
   for i=area.left_top.x,area.right_bottom.x do
     -- local debug_string = ""
     for j=area.left_top.y,area.right_bottom.y do
-      if array[i][j] >= 0 then
+      if array[i][j] >= 0 and not skip_directions[array[i][j]] then
         square_size[i][j] = math.min(square_size[i-1][j-1], square_size[i-1][j], square_size[i][j-1]) + 1
         if square_size[i][j] > max_size then
           max_size = square_size[i][j]
