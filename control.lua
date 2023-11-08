@@ -218,14 +218,19 @@ function compute_direction_array(surface, area)
 end
 
 ---compute the AABB of a given (valid) blueprint
+---and verify that the entities within it are all transport belts
 ---@param blueprint_entities any
----@return number xmin min x value
----@return number xmax max x value
----@return number ymin min y value
----@return number ymax max y value
+---@return number|nil xmin min x value
+---@return number|nil xmax max x value
+---@return number|nil ymin min y value
+---@return number|nil ymax max y value
 function compute_blueprint_aabb(blueprint_entities)
+  local entity_prototypes = game.entity_prototypes
   local xmin, xmax, ymin, ymax
   for _, blueprint_entity in pairs(blueprint_entities) do
+    local entity_prototype = entity_prototypes[blueprint_entity.name]
+    if not entity_prototype or entity_prototype.type ~= "transport-belt" then return nil, nil, nil, nil end
+
     if not (xmin and xmax and ymin and ymax) then 
       xmin = blueprint_entity.position.x
       xmax = blueprint_entity.position.x
@@ -286,9 +291,12 @@ function on_pre_build(event)
   if not cursor_position then return end
 
   -- compute blueprint aabb so we know the bounds to search for belts to turn
+  -- also checks that all the entities in the blueprint are belts so we can fail-fast
+  -- if they are not and avoid wasting compute resources when unnecessary
   local blueprint = player.cursor_stack
   local blueprint_entities = blueprint.get_blueprint_entities()
   local xmin, xmax, ymin, ymax = compute_blueprint_aabb(blueprint_entities)
+  if not (xmin and xmax and ymin and ymax) then return end
 
   -- compute aabb center since we need to treat the blueprint entities as relative to this point
   local blueprint_center = {
