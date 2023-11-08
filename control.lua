@@ -299,6 +299,12 @@ function on_pre_build(event)
   local brush_width = math.min(ymax - ymin, xmax - xmin) + 1 -- the width is the min side length of the rectangle since we require a rectangle to be able to detect the turning event
   if not blueprint_direction then return end
 
+  -- the direction of the belts in the blueprint is not the direction of the pasted belts
+  -- so we compute the pasted blueprint direction by modifying the direction by the direction of the paste from the event
+  -- mod 8 because factorio directions are in mod 8 
+  -- TODO will this change in 2.0 with 16 direction rails
+  local pasted_blueprint_direction = (blueprint_direction + event.direction) % 8
+
   -- compute the AABB of the pasted location using the transformation logic on the blueprint AABB
   local t_xmin, t_xmax, t_ymin, t_ymax = transform_aabb(delta, event.direction, xmin, xmax, ymin, ymax, blueprint_center)
   local area = {left_top={x=math.floor(t_xmin),y=math.floor(t_ymin)}, right_bottom={x=math.floor(t_xmax)+1,y=math.floor(t_ymax)+1}}
@@ -308,17 +314,18 @@ function on_pre_build(event)
   -- if this square is present, it is the square of belts in the corner of the existing belt line and the turned belt line
   -- being created by the pre_build blueprint stamp down event
   local array = compute_direction_array(surface, area)
-  local candidate_square = find_square(array, area)
+  -- but while searching for the square, we want to skip over any belts matching the direction of the pasted blueprint
+  -- (or the opposite direction of the pasted blueprint) since we wouldn't be interested in turning them and if 
+  -- we consider them we waste computing time later trying to figure out if we should turn a square containing them
+  -- when we can already ignore that square at this step
+  local skip_directions = {}
+  skip_directions[pasted_blueprint_direction] = true
+  skip_directions[(pasted_blueprint_direction + 4) % 8] = true
+  local candidate_square = find_square(array, area, skip_directions)
   if not candidate_square or candidate_square.size ~= brush_width then return end
 
   -- compute the direction of the square of belts that we might be turning
   local square_direction = compute_square_direction(array, candidate_square)
-
-  -- the direction of the belts in the blueprint is not the direction of the pasted belts
-  -- so we compute the pasted blueprint direction by modifying the direction by the direction of the paste from the event
-  -- mod 8 because factorio directions are in mod 8 
-  -- TODO will this change in 2.0 with 16 direction rails
-  local pasted_blueprint_direction = (blueprint_direction + event.direction) % 8
 
   -- if the paste direction is either the same or opposite the sqaure direction we can't make a 90 degree turn
   if pasted_blueprint_direction == square_direction or (pasted_blueprint_direction + 4) % 8 == square_direction then
@@ -395,10 +402,12 @@ end
 script.on_event(defines.events.on_pre_build, on_pre_build)
 
 ---finds the largest possible square inside some rectangle area
+---ignoring all positions in the array that match the skipped directions
 ---@param array any
 ---@param area any
+---@param skip_directions any
 ---@return table|nil
-function find_square(array, area)
+function find_square(array, area, skip_directions)
   local square_size = {}
   -- additional 1 row/col to the top_left to not have to do out-of-bounds checks
   for i=area.left_top.x-1,area.right_bottom.x do
@@ -414,7 +423,7 @@ function find_square(array, area)
   for i=area.left_top.x,area.right_bottom.x do
     -- local debug_string = ""
     for j=area.left_top.y,area.right_bottom.y do
-      if array[i][j] >= 0 then
+      if array[i][j] >= 0 and not skip_directions[array[i][j]] then
         square_size[i][j] = math.min(square_size[i-1][j-1], square_size[i-1][j], square_size[i][j-1]) + 1
         if square_size[i][j] > max_size then
           max_size = square_size[i][j]
