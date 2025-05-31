@@ -32,7 +32,7 @@ function pos_dup(pos1)
 end
 
 ---rotate a vector
----only accepts directions 0, 2, 4, 6
+---only accepts directions 0, 4, 8, 12
 ---essentially just multiplies the vector by the 2d rotation matrix for the rotation
 ---represented by the direction (factorio directions are clockwise but typical math notation is counterclockwise so be careful)
 ---but unrolled and without any sines or cosines
@@ -42,11 +42,11 @@ end
 function pos_rot(pos, direction)
   if direction == 0 then
     return pos_dup(pos)
-  elseif direction == 6 then
+  elseif direction == 12 then
     return {x=-pos.y,y=pos.x}
-  elseif direction == 4 then
+  elseif direction == 8 then
     return {x=-pos.x,y=-pos.y}
-  elseif direction == 2 then
+  elseif direction == 4 then
     return {x=pos.y,y=-pos.x}
   end
 end
@@ -76,11 +76,11 @@ end
 ---@return unknown
 ---@return unknown
 ---@return unknown
-function transform_aabb(delta, direction, xmin, xmax, ymin, ymax, blueprint_center)
-  if direction == 0 or direction == 4 then
+function transform_aabb(delta, direction, xmin, xmax, ymin, ymax, blueprint_center, player)
+  if direction == 0 or direction == 8 then
     -- these directions dont change the positions of the bounds so only modify by the delta
     return xmin + delta.x, xmax + delta.x, ymin + delta.y, ymax + delta.y
-  elseif direction == 2 or direction == 6 then
+  elseif direction == 4 or direction == 12 then
     -- compute the rotation relative to the blueprint center by changing coordinates to blueprint center as (0, 0), rotating, and then reversing the coordinate change
     -- add the delta at the end after the rest of the transformation
     local xdiff = blueprint_center.x - xmin
@@ -276,10 +276,9 @@ end
 ---@return number|nil ymin min y value
 ---@return number|nil ymax max y value
 function compute_blueprint_aabb(blueprint_entities)
-  local entity_prototypes = game.entity_prototypes
   local xmin, xmax, ymin, ymax
   for _, blueprint_entity in pairs(blueprint_entities) do
-    local entity_prototype = entity_prototypes[blueprint_entity.name]
+    local entity_prototype = prototypes.entity[blueprint_entity.name]
     if not entity_prototype or entity_prototype.type ~= "transport-belt" then return nil, nil, nil, nil end
 
     if not (xmin and xmax and ymin and ymax) then 
@@ -334,13 +333,6 @@ function on_pre_build(event)
   local player = game.players[event.player_index]
   if not (player.cursor_stack and player.cursor_stack.valid and player.cursor_stack.valid_for_read and player.cursor_stack.is_blueprint and player.cursor_stack.is_blueprint_setup()) then return end
 
-  -- pre_build does not give the location of the blueprint paste, so we co-opt the custom input event from on_belt_turner to get the position
-  -- since the custom input event can exactly match stamping a blueprint down with a  linked_game_control of "build-ghost" and it gets the cursor position
-  -- this does mean the logic here relies on the custom input event being fired before on_pre_build which is empirically the case but not technically a part of the
-  -- API as best I can find
-  local cursor_position = global.cursor_positions[event.player_index]
-  if not cursor_position then return end
-
   -- compute blueprint aabb so we know the bounds to search for belts to turn
   -- also checks that all the entities in the blueprint are belts so we can fail-fast
   -- if they are not and avoid wasting compute resources when unnecessary
@@ -357,7 +349,7 @@ function on_pre_build(event)
   }
   -- compute difference between the cursor position and the blueprint aabb center to understand the relative
   -- change in position required to map blueprint entities to their pasted position
-  local delta = pos_sub(cursor_position, blueprint_center)
+  local delta = pos_sub(event.position, blueprint_center)
 
   -- compute the direction the blueprint belts point and determine the width of the belt lines we are turning
   local blueprint_direction = compute_blueprint_direction(blueprint_entities)
@@ -368,10 +360,10 @@ function on_pre_build(event)
   -- so we compute the pasted blueprint direction by modifying the direction by the direction of the paste from the event
   -- mod 8 because factorio directions are in mod 8 
   -- TODO will this change in 2.0 with 16 direction rails
-  local pasted_blueprint_direction = (blueprint_direction + event.direction) % 8
+  local pasted_blueprint_direction = (blueprint_direction + event.direction) % 16
 
   -- compute the AABB of the pasted location using the transformation logic on the blueprint AABB
-  local t_xmin, t_xmax, t_ymin, t_ymax = transform_aabb(delta, event.direction, xmin, xmax, ymin, ymax, blueprint_center)
+  local t_xmin, t_xmax, t_ymin, t_ymax = transform_aabb(delta, event.direction, xmin, xmax, ymin, ymax, blueprint_center, player)
   local area = {left_top={x=math.floor(t_xmin),y=math.floor(t_ymin)}, right_bottom={x=math.floor(t_xmax)+1,y=math.floor(t_ymax)+1}}
   local surface = player.surface
 
@@ -385,7 +377,7 @@ function on_pre_build(event)
   -- when we can already ignore that square at this step
   local skip_directions = {}
   skip_directions[pasted_blueprint_direction] = true
-  skip_directions[(pasted_blueprint_direction + 4) % 8] = true
+  skip_directions[(pasted_blueprint_direction + 8) % 16] = true
   local candidate_square = find_square(array, area, skip_directions)
   if not candidate_square or candidate_square.size ~= brush_width then return end
 
@@ -393,7 +385,7 @@ function on_pre_build(event)
   local square_direction = compute_square_direction(array, candidate_square)
 
   -- if the paste direction is either the same or opposite the sqaure direction we can't make a 90 degree turn
-  if pasted_blueprint_direction == square_direction or (pasted_blueprint_direction + 4) % 8 == square_direction then
+  if pasted_blueprint_direction == square_direction or (pasted_blueprint_direction + 8) % 16 == square_direction then
     return
   end
 
@@ -414,7 +406,8 @@ function on_pre_build(event)
     -- we don't want to overwrite the positions already filled in with real entities with the to be pasted directions so skip those positions in the array
     if array_extension[xformed_x][xformed_y] < 0 then
       array_extension[xformed_x] = array_extension[xformed_x] or {}
-      array_extension[xformed_x][xformed_y] = ((blueprint_entity.direction or 0 ) + event.direction) % 8 -- the API is weird and returns nil instead of 0
+      -- the API is weird and returns nil instead of 0 (don't know if this still happens in 2.0 so just leave as-is)
+      array_extension[xformed_x][xformed_y] = ((blueprint_entity.direction or 0 ) + event.direction) % 16
     end
   end
 
@@ -446,22 +439,22 @@ function on_pre_build(event)
   -- belts in the square is only based on the incoming and outgoing direction
   -- note that the cases here don't cover every possible combination of the 4 directions for the 4 edges of the square
   -- but this is because there are only 8 possible belt turns so we look for them specifically
-  if x_right_dir == 2 and y_bottom_dir == 0 then
-    turn_belts(player, surface, area_turn, 0, 2, true)
-  elseif x_left_dir == 2 and y_top_dir == 0 then
-    turn_belts(player, surface, area_turn, 2, 0, true)
-  elseif (x_right_dir == 2 and y_top_dir == 4) then
-    turn_belts2(player, surface, area_turn, 2, 4, true)
-  elseif (x_left_dir == 2 and y_bottom_dir == 4) then
-    turn_belts2(player, surface, area_turn, 4, 2, true)
-  elseif (x_right_dir == 6 and y_top_dir == 0) then
-    turn_belts2(player, surface, area_turn, 6, 0, false)
-  elseif (x_left_dir == 6 and y_bottom_dir == 0) then
-    turn_belts2(player, surface, area_turn, 0, 6, false)
-  elseif (x_right_dir == 6 and y_bottom_dir == 4) then
-    turn_belts(player, surface, area_turn, 4, 6, false)
-  elseif (x_left_dir == 6 and y_top_dir == 4) then
-    turn_belts(player, surface, area_turn, 6, 4, false)
+  if x_right_dir == 4 and y_bottom_dir == 0 then
+    turn_belts(player, surface, area_turn, 0, 4, true)
+  elseif x_left_dir == 4 and y_top_dir == 0 then
+    turn_belts(player, surface, area_turn, 4, 0, true)
+  elseif (x_right_dir == 4 and y_top_dir == 8) then
+    turn_belts2(player, surface, area_turn, 4, 8, true)
+  elseif (x_left_dir == 4 and y_bottom_dir == 8) then
+    turn_belts2(player, surface, area_turn, 8, 4, true)
+  elseif (x_right_dir == 12 and y_top_dir == 0) then
+    turn_belts2(player, surface, area_turn, 12, 0, false)
+  elseif (x_left_dir == 12 and y_bottom_dir == 0) then
+    turn_belts2(player, surface, area_turn, 0, 12, false)
+  elseif (x_right_dir == 12 and y_bottom_dir == 8) then
+    turn_belts(player, surface, area_turn, 8, 12, false)
+  elseif (x_left_dir == 12 and y_top_dir == 8) then
+    turn_belts(player, surface, area_turn, 12, 8, false)
   end
 end
 script.on_event(defines.events.on_pre_build, on_pre_build)
@@ -542,21 +535,3 @@ function compute_area_direction(array_extension, area)
   end
   return direction
 end
-
-function on_belt_turner(event)
-  -- ensure this is a valid blueprint stamped down event
-  local player = game.players[event.player_index]
-  if not (player.cursor_stack and player.cursor_stack.valid and player.cursor_stack.valid_for_read and player.cursor_stack.is_blueprint and player.cursor_stack.is_blueprint_setup()) then return end
-
-  -- save the position the blueprint is being stamped
-  global.cursor_positions = global.cursor_positions or {}
-  global.cursor_positions[event.player_index] = event.cursor_position
-end
-script.on_event("belt-turner", on_belt_turner)
-
-function on_tick(event)
-  -- clear the cursor position every tick since we only using during a single tick
-  -- to pass information from the custom input event to the pre build event
-  global.cursor_positions = {}
-end
-script.on_nth_tick(1, on_tick)

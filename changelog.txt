@@ -1,4 +1,9 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.0.5
+Date: 2025-05-30
+  Changes:
+    - Updated for Factorio 2.0 (mostly just dealt with direction changing from 8 possible values to 16 possible values)
+---------------------------------------------------------------------------------------------------
 Version: 0.0.4
 Date: 2023-11-08
   Bugfixes:
